@@ -1,0 +1,7 @@
+__pycache__/
+
+
+# RePose specific stuff:
+json_src
+img_out
+logbox.log
