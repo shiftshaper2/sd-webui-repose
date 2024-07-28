@@ -140,6 +140,7 @@ def rotate_around(person, points, center, radians):
 img_src_dir = "img_src"
 json_src_dir = "json_src"
 img_out_dir = "img_out"
+scripts_dir = "reposes"
 
 opd = OpenposeDetector()
 
@@ -174,9 +175,9 @@ output_queue = []
 
 
 def render_frames(outname, frames, height, width, frame_time=8):
-    print(f"Rendering {len(frames)} frames, {height}x{width}", end="", flush=True)
-
     out_dir = os.path.join(repose_base_dir, img_out_dir, outname)
+    # print(f"Rendering {len(frames)} frames to '{out_dir}', {height}x{width}", end="", flush=True)
+
     try:
         os.mkdir(out_dir)
     except FileExistsError:
@@ -195,19 +196,20 @@ def render_frames(outname, frames, height, width, frame_time=8):
         pose_img = Image.fromarray(pose_img)
         pose_imgs.append(pose_img)
         pose_img.save(os.path.join(out_dir, f"frame_{e:05}.png"))
-        print(".", end="", flush=True)
+        # print(".", end="", flush=True)
 
     # Save as GIF
     anim_path = os.path.join(repose_base_dir, img_out_dir, f"{outname}.gif")
     pose_imgs[0].save(anim_path, save_all=True, append_images=pose_imgs[1:], duration=frame_time, loop=0)
     
     output_queue.append({"frames_path":out_dir,"anim":anim_path})
-    
-    print(" Done.")
+    print(f"Rendered {len(frames)} frames to '{os.path.abspath(out_dir)}', {height}x{width}")
 
-logbox = None
+    
+    #print(" Done.")
 
 # upon load, clear the log box
+
 logbox_path = os.path.join(repose_base_dir, "logbox.log")
 with open(logbox_path, 'w'):
     pass
@@ -229,7 +231,9 @@ def exec_codebox(codebox):
         for f in os.listdir(o["frames_path"])
     ]
     
-    return (anims, frames)
+    with open(logbox_path, 'r') as logbox_file:
+        logbox_result = logbox_file.read()
+    return (anims, frames, logbox_result)
     
 
 def refresh_input_gallery():
@@ -297,8 +301,21 @@ def upload_anim(fileobj, progress=gr.Progress()):
     return None, refresh_input_gallery()
 
 
-def print_only(x):
-    print(x)
+def list_scripts():
+    scripts_root = os.path.join(repose_base_dir, scripts_dir)
+    return sorted(os.listdir(scripts_root))
+
+def load_script(script_name):
+    scripts_root = os.path.join(repose_base_dir, scripts_dir)
+    with open(os.path.join(scripts_root, script_name)) as sf:
+        code = sf.read()
+    return code
+
+def save_script(script_name, codebox):
+    scripts_root = os.path.join(repose_base_dir, scripts_dir)
+    with open(os.path.join(scripts_root, script_name), 'w') as sf:
+        sf.write(codebox)
+
 
 # load the UI
 
@@ -325,10 +342,9 @@ def on_ui_tabs():
             # Code Column
             with gr.Column(scale=2) as code_column:
                 with gr.Row() as file_row:
-                    gr.Textbox("Filename")
-                    gr.Button("Load", interactive=False)
-                    gr.Button("Save", interactive=False)
-                    gr.Button("Save As", interactive=False)
+                    script_fname = gr.Dropdown(label = "Filename", allow_custom_value = True, choices = list_scripts())
+                    load_button = gr.Button("Load")
+                    save_button = gr.Button("Save")
                     run_button = gr.Button("Run")
                 
                 # logbox
@@ -336,8 +352,7 @@ def on_ui_tabs():
                 def read_all():
                     logfile.seek(0)
                     return logfile.read()
-                global logbox
-                logbox = gr.Textbox(value = read_all, interactive = False, every = 2)
+                logbox = gr.Textbox(value = read_all, interactive = False)
                 
                 # Code
                 with open(os.path.join(repose_base_dir, "reposes/default.py")) as user_repose:
@@ -356,7 +371,9 @@ def on_ui_tabs():
             
             # hook in listeners, etc
             
-            run_button.click(fn = exec_codebox, inputs = codebox, outputs = [animated_output, frames_output])
+            run_button.click(fn = exec_codebox, inputs = codebox, outputs = [animated_output, frames_output, logbox])
+            load_button.click(fn = load_script, inputs = script_fname, outputs = codebox)
+            save_button.click(fn = save_script, inputs = [script_fname, codebox])
         return [(ui_component, "RePose", "repose_tab")]
 
 script_callbacks.on_ui_tabs(on_ui_tabs)
