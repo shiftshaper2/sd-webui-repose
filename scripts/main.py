@@ -2,6 +2,7 @@ import gradio as gr
 import os
 import time
 import traceback
+import shutil
 from modules import script_callbacks, scripts
 
 
@@ -149,70 +150,23 @@ def json_from_nparray(nparray):
     opd(nparray, True, True, True, True, json_pose_callback=print_json)
     return pose_stacks[0]
 
-def load_anim(anim_path):
-    base_filename = os.path.splitext(anim_path)[0]
+
+def load_anim(anim_name):
+
+    base_filename = anim_name
     output_dir = os.path.join(repose_base_dir, json_src_dir, base_filename)
     json_results = []
-
-    try:
-        os.mkdir(output_dir)
-    except FileExistsError:
-        # load the jsons that exist there instead
-        print(f"Loading previously parsed animation '{anim_path}'")
-
-        
-        # List all files in the directory
-        for filename in sorted(os.listdir(output_dir)):
-            if filename.endswith('.json'):
-                file_path = os.path.join(output_dir, filename)
-                
-                # Open and load the JSON file
-                with open(file_path, 'r') as json_file:
-                    data = json.load(json_file)
-                    json_results.append(data)
-
-        return json_results
-
-
-    print(f"Loading animation '{anim_path}'", end="", flush=True)
-    # Open the WebP
-    anim = Image.open(os.path.join(repose_base_dir, img_src_dir, anim_path))
-    frame_number = 0
     
-    while True:
-        try:
-            anim.seek(frame_number)
+    # List all [JSON] files in the directory
+    for filename in sorted(os.listdir(output_dir)):
+        if filename.endswith('.json'):
+            file_path = os.path.join(output_dir, filename)
             
-            # Convert the frame to a numpy array
-            frame_array = np.array(anim.convert('RGB'))
-            if len(frame_array.shape) == 3 and frame_array.shape[2]:
-                frame_array = frame_array[:,:,:3]
-            
-            Image.fromarray(frame_array).save("total_test.png")
-            # Process the frame array with the user-defined function
-            json_result = json_from_nparray(frame_array)
-            
-            # Determine the output filename
-            output_filename = os.path.join(output_dir, f"frame_{frame_number:05}.json")
-            
-            # Write the result string to a file
-            with open(output_filename, 'w') as output_file:
-                json.dump(json_result, output_file)
+            # Open and load the JSON file
+            with open(file_path, 'r') as json_file:
+                data = json.load(json_file)
+                json_results.append(data)
 
-            json_results.append(json_result)
-
-
-            # Increment the frame number to move to the next frame
-            frame_number += 1
-            
-            # Move to the next frame
-            print(".", end="", flush=True)
-            
-        except EOFError:
-            # Exit the loop when we have processed all frames
-            break
-
-    print(" Done.")
     return json_results
 
 
@@ -278,6 +232,73 @@ def exec_codebox(codebox):
     return (anims, frames)
     
 
+def refresh_input_gallery():
+    input_gallery_root = os.path.join(repose_base_dir, img_src_dir)
+    return sorted([os.path.join(input_gallery_root, f) for f in os.listdir(input_gallery_root)])
+
+def upload_anim(fileobj, progress=gr.Progress()):
+
+    original_filename = os.path.basename(fileobj.name)
+
+    base_filename = os.path.basename(fileobj.name)
+    anim_path = fileobj.name
+    saved_filepath = os.path.join(repose_base_dir, img_src_dir, base_filename)
+
+    shutil.copyfile(fileobj.name, saved_filepath)
+
+    output_dir = os.path.join(repose_base_dir, json_src_dir, base_filename)
+    json_results = []
+
+    os.mkdir(output_dir)
+    # lean into the FileExistsError later
+
+    print(f"Loading animation '{base_filename}'", end="", flush=True)
+    # Open the WebP
+    anim = Image.open(saved_filepath)
+    n_frames = anim.n_frames
+    progress(0, n_frames)
+    frame_number = 0
+    
+    while True:
+        try:
+            anim.seek(frame_number)
+            
+            # Convert the frame to a numpy array
+            frame_array = np.array(anim.convert('RGB'))
+            if len(frame_array.shape) == 3 and frame_array.shape[2]:
+                frame_array = frame_array[:,:,:3]
+            
+            # Process the frame array with the user-defined function
+            json_result = json_from_nparray(frame_array)
+            
+            # Determine the output filename
+            output_filename = os.path.join(output_dir, f"frame_{frame_number:05}.json")
+            
+            # Write the result string to a file
+            with open(output_filename, 'w') as output_file:
+                json.dump(json_result, output_file)
+
+            json_results.append(json_result)
+
+            progress(frame_number, n_frames)
+
+            # Increment the frame number to move to the next frame
+            frame_number += 1
+            
+            # Move to the next frame
+            print(".", end="", flush=True)
+            
+        except EOFError:
+            # Exit the loop when we have processed all frames
+            break
+
+    progress(None)
+    
+    return None, refresh_input_gallery()
+
+
+def print_only(x):
+    print(x)
 
 # load the UI
 
@@ -290,10 +311,13 @@ def on_ui_tabs():
                 # Input Images
                 with gr.Tab("Inputs") as inputs:
                     # gallery of images / mp4s
-                    with gr.Row() as input_buttons_row:
-                        gr.UploadButton("Upload to Library", interactive=False)
-                        gr.Button("Copy to Code", interactive = False)
-                    gr.Gallery()
+                    inputs_gallery = gr.Gallery(refresh_input_gallery())
+                    gr.Button("Copy to Code", interactive = False)
+                    uploader = gr.UploadButton(
+                            file_types=[".gif",".webp"]
+                        )
+
+                    uploader.upload(fn = upload_anim, inputs=uploader, outputs=[uploader, inputs_gallery])
 
                 with gr.Tab("Documentation") as docs:
                     gr.HTML("Documentation. <h3>Hello</h3> This is a test.")
