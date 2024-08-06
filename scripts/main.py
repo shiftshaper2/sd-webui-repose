@@ -325,6 +325,9 @@ def on_ui_tabs():
             # Input Column
             with gr.Column(scale=1) as input_column:
 
+                with gr.Tab("Documentation") as docs:
+                    gr.HTML("<p>Documentation in progress; for now read the beginning of <a href='https://github.com/shiftshaper2/sd-webui-repose/blob/main/scripts/main.py'>this python script</a> up to about 'rotate around'.</p>")
+            
                 # Input Images
                 with gr.Tab("Inputs") as inputs:
                     # gallery of images / mp4s
@@ -336,9 +339,6 @@ def on_ui_tabs():
 
                     uploader.upload(fn = upload_anim, inputs=uploader, outputs=[uploader, inputs_gallery])
 
-                with gr.Tab("Documentation") as docs:
-                    gr.HTML("Documentation. <h3>Hello</h3> This is a test.")
-            
             # Code Column
             with gr.Column(scale=2) as code_column:
                 with gr.Row() as file_row:
