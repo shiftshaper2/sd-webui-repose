@@ -61,10 +61,12 @@ HEAD = union(NOSE, NECK, RIGHT_EYE, LEFT_EYE, RIGHT_EAR, LEFT_EAR, FACE)
 LEFT_BODY = union(LEFT_SHOULDER, LEFT_ELBOW, LEFT_WRIST, LEFT_HIP, LEFT_KNEE, LEFT_ANKLE, LEFT_HAND_ONLY)
 RIGHT_BODY = union(RIGHT_SHOULDER, RIGHT_ELBOW, RIGHT_WRIST, RIGHT_HIP, RIGHT_KNEE, RIGHT_ANKLE, RIGHT_HAND_ONLY)
 
+
 def load_json(fpath):
     with open(fpath, 'r') as file:
         data = json.load(file)
     return data
+
 
 def person(json_data, index=0):
     return json_data["people"][index]
@@ -90,14 +92,18 @@ def get(person, point):
         person[key][point_id * 3 + 1]
     )
 
+
 def add_t(t1, t2):
     return (t1[0] + t2[0], t1[1] + t2[1])
+
 
 def sub_t(t1, t2):
     return (t1[0] - t2[0], t1[1] - t2[1])
 
+
 def mult_t(t, alpha):
     return (t[0] * alpha, t[1] * alpha)
+
 
 def move_by(person, points, amount):
     for key in points:
@@ -120,6 +126,22 @@ def replace(target, source, points, aligner, scale_factor = 1):
                 target[key][point * 3 + 0] = t0[0] + dx
                 target[key][point * 3 + 1] = t0[1] + dy
                 target[key][point * 3 + 2] = source[key][point * 3 + 2]
+
+
+def scale(person, points, scale_factor):
+    for key in points:
+        if key in person and person[key] is not None:
+            for point in points[key]:
+                person[key][point * 3 + 0] *= scale_factor
+                person[key][point * 3 + 1] *= scale_factor
+
+
+def smooth(person_time, points, anchor, factor = 0.1):
+    new_anchor = get(person_time[0], anchor)
+    for moment in person_time:
+        old_anchor = get(moment, anchor)
+        new_anchor = add_t(mult_t(new_anchor, 1 - factor), mult_t(old_anchor, factor))
+        move_by(moment, points, sub_t(new_anchor, old_anchor))
 
 
 def rotate_around(person, points, center, radians):
